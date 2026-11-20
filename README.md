@@ -1,7 +1,7 @@
 # Glowing Key Garden
 
-This is my little web toy. One day each key you press will bloom a soft patch of coloured light and play a gentle note.
+This is my little web toy. Each key you press blooms a soft patch of coloured light, and one day it will play a gentle note too.
 
-Right now (step 2 of 5) the page listens for key presses. When you press a key, the name of it shows at the top. Tapping the screen works too, for phones.
+Right now (step 3 of 5) every key blooms a glowing patch. Letter keys bloom where they sit on a keyboard, so the top row glows near the top. Other keys pick a steady spot of their own. Tapping the screen blooms a patch right under your finger, for phones.
 
-To try it, open the page and press some keys. The glowing flowers and the notes are still to come!
+To try it, open the page and press lots of keys. The notes and the slow fading away are still to come!

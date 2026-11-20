@@ -1,4 +1,4 @@
-// Glowing Key Garden: step 4, every key blooms light AND plays a soft note.
+// Glowing Key Garden: step 5, blooms now fade slowly away.
 const canvas = document.getElementById('garden');
 const ctx = canvas.getContext('2d');
 const hint = document.getElementById('hint');
@@ -7,15 +7,14 @@ const last = document.getElementById('last');
 // all the blooms currently in the garden
 const blooms = [];
 
-// the keyboard rows, so each key gets a spot that matches where it sits
-const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+// how long a bloom lives, in milliseconds (opens fast, then drifts away)
+const LIFE = 8000;
 
-// a pentatonic scale (in semitones) so any mix of keys sounds gentle together
-const scale = [0, 2, 4, 7, 9];
+const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+const scale = [0, 2, 4, 7, 9]; // pentatonic, so everything sounds gentle
 
 let audio = null;
 
-// browsers only allow sound after a user action, so I make it on the first press
 function getAudio() {
   if (!audio) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -26,16 +25,21 @@ function getAudio() {
   return audio;
 }
 
-// turn a key's hash into a note frequency
+function hashName(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
 function freqFor(name) {
   const h = hashName(name);
   const step = scale[h % scale.length];
-  const octave = Math.floor(h / 5) % 3; // three octaves
-  const semis = step + octave * 12;
-  return 261.63 * Math.pow(2, semis / 12); // starts at middle C
+  const octave = Math.floor(h / 5) % 3;
+  return 261.63 * Math.pow(2, (step + octave * 12) / 12);
 }
 
-// play a soft bell-like note that swells in and slowly dies away
 function playNote(name) {
   const a = getAudio();
   if (!a) return;
@@ -46,7 +50,6 @@ function playNote(name) {
   gain.gain.exponentialRampToValueAtTime(0.18, t + 0.04);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
   gain.connect(a.destination);
-  // a pure tone plus a quiet octave above for sparkle
   [[f, 1], [f * 2, 0.25]].forEach(function (p) {
     const o = a.createOscillator();
     const g = a.createGain();
@@ -61,24 +64,12 @@ function playNote(name) {
 }
 
 function resize() {
-  // use devicePixelRatio so it looks crisp on phones
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  draw();
 }
 
-// a simple number from text, so unknown keys still get a steady spot and colour
-function hashName(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-// work out where a key blooms (x, y as 0..1)
 function spotFor(name) {
   const k = name.toLowerCase();
   for (let r = 0; r < rows.length; r++) {
@@ -102,31 +93,36 @@ function addBloom(name, x, y) {
     born: performance.now(),
     size: 60 + (h % 60)
   });
-  if (blooms.length > 80) blooms.shift(); // keep it light
+  if (blooms.length > 80) blooms.shift();
+}
+
+// the loop runs all the time; it's cheap when the garden is empty
+function frame() {
+  const t = performance.now();
+  // forget blooms that have fully faded
+  for (let i = blooms.length - 1; i >= 0; i--) {
+    if (t - blooms[i].born > LIFE) blooms.splice(i, 1);
+  }
+  draw(t);
   requestAnimationFrame(frame);
 }
 
-function frame() {
-  draw();
-  // keep animating while any bloom is still opening
-  const t = performance.now();
-  const running = blooms.some(function (b) { return t - b.born < 700; });
-  if (running) requestAnimationFrame(frame);
-}
-
-function draw() {
-  // a deep night colour
+function draw(t) {
+  ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = '#07060f';
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-  const t = performance.now();
-  ctx.globalCompositeOperation = 'lighter'; // light adds up, so overlaps glow
+  ctx.globalCompositeOperation = 'lighter';
   for (const b of blooms) {
-    const age = Math.min((t - b.born) / 600, 1);
-    const ease = 1 - Math.pow(1 - age, 3); // opens fast, then slows
-    const r = b.size * (0.2 + 0.8 * ease) * 1.6;
+    const ms = t - b.born;
+    const open = Math.min(ms / 600, 1);
+    const ease = 1 - Math.pow(1 - open, 3);
+    // fade: stays bright a moment, then slowly dims to nothing
+    const left = Math.max(0, 1 - ms / LIFE);
+    const alpha = left * left;
+    const r = b.size * (0.2 + 0.8 * ease) * 1.6 * (0.7 + 0.3 * left);
     const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
-    g.addColorStop(0, 'hsla(' + b.hue + ',90%,70%,0.85)');
-    g.addColorStop(0.4, 'hsla(' + b.hue + ',90%,55%,0.35)');
+    g.addColorStop(0, 'hsla(' + b.hue + ',90%,70%,' + (0.85 * alpha) + ')');
+    g.addColorStop(0.4, 'hsla(' + b.hue + ',90%,55%,' + (0.35 * alpha) + ')');
     g.addColorStop(1, 'hsla(' + b.hue + ',90%,40%,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -134,32 +130,37 @@ function draw() {
     ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
+  // when the garden is empty again, it goes back to sleep
+  if (blooms.length === 0 && started) hint.style.opacity = '1';
 }
 
-function onKey(event) {
-  if (event.repeat) return; // ignore a held-down key repeating
-  if (event.ctrlKey || event.metaKey || event.altKey) return; // leave shortcuts alone
-  if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta') return;
-  const name = event.key === ' ' ? 'Space' : event.key;
-  const s = spotFor(name);
-  handleKey(name, s.x, s.y);
-}
+let started = false;
 
 function handleKey(name, x, y) {
+  started = true;
   hint.style.opacity = '0';
   last.textContent = 'You pressed: ' + name;
   addBloom(name, x, y);
   playNote(name);
 }
 
+function onKey(event) {
+  if (event.repeat) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta') return;
+  const name = event.key === ' ' ? 'Space' : event.key;
+  const s = spotFor(name);
+  handleKey(name, s.x, s.y);
+}
+
 window.addEventListener('keydown', onKey);
 
 // phones have no keyboard, so a tap blooms right where you touch
-canvas.addEventListener('pointerdown', function (e) {
-  // taps cycle through a few names so they sing different notes
+window.addEventListener('pointerdown', function (e) {
   handleKey('tap' + (blooms.length % 7), e.clientX / window.innerWidth, e.clientY / window.innerHeight);
   last.textContent = 'You tapped the garden';
 });
 
 window.addEventListener('resize', resize);
 resize();
+requestAnimationFrame(frame);

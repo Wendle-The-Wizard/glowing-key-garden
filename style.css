@@ -1,0 +1,26 @@
+/* Wendle's dark garden: the canvas fills the whole page */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #07060f;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  margin: 0;
+  text-align: center;
+  font-family: Georgia, serif;
+  font-size: 1rem;
+  color: #8f86b8;
+  pointer-events: none;
+}

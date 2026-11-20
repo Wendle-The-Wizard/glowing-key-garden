@@ -1,4 +1,4 @@
-// Glowing Key Garden: step 3, every key blooms a glowing patch.
+// Glowing Key Garden: step 4, every key blooms light AND plays a soft note.
 const canvas = document.getElementById('garden');
 const ctx = canvas.getContext('2d');
 const hint = document.getElementById('hint');
@@ -9,6 +9,56 @@ const blooms = [];
 
 // the keyboard rows, so each key gets a spot that matches where it sits
 const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+
+// a pentatonic scale (in semitones) so any mix of keys sounds gentle together
+const scale = [0, 2, 4, 7, 9];
+
+let audio = null;
+
+// browsers only allow sound after a user action, so I make it on the first press
+function getAudio() {
+  if (!audio) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audio = new AC();
+  }
+  if (audio.state === 'suspended') audio.resume();
+  return audio;
+}
+
+// turn a key's hash into a note frequency
+function freqFor(name) {
+  const h = hashName(name);
+  const step = scale[h % scale.length];
+  const octave = Math.floor(h / 5) % 3; // three octaves
+  const semis = step + octave * 12;
+  return 261.63 * Math.pow(2, semis / 12); // starts at middle C
+}
+
+// play a soft bell-like note that swells in and slowly dies away
+function playNote(name) {
+  const a = getAudio();
+  if (!a) return;
+  const f = freqFor(name);
+  const t = a.currentTime;
+  const gain = a.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.18, t + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+  gain.connect(a.destination);
+  // a pure tone plus a quiet octave above for sparkle
+  [[f, 1], [f * 2, 0.25]].forEach(function (p) {
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = 'sine';
+    o.frequency.value = p[0];
+    g.gain.value = p[1];
+    o.connect(g);
+    g.connect(gain);
+    o.start(t);
+    o.stop(t + 1.7);
+  });
+}
 
 function resize() {
   // use devicePixelRatio so it looks crisp on phones
@@ -56,12 +106,11 @@ function addBloom(name, x, y) {
   requestAnimationFrame(frame);
 }
 
-let running = false;
-function frame(now) {
+function frame() {
   draw();
   // keep animating while any bloom is still opening
   const t = performance.now();
-  running = blooms.some(function (b) { return t - b.born < 700; });
+  const running = blooms.some(function (b) { return t - b.born < 700; });
   if (running) requestAnimationFrame(frame);
 }
 
@@ -90,10 +139,8 @@ function draw() {
 function onKey(event) {
   if (event.repeat) return; // ignore a held-down key repeating
   if (event.ctrlKey || event.metaKey || event.altKey) return; // leave shortcuts alone
+  if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Alt' || event.key === 'Meta') return;
   const name = event.key === ' ' ? 'Space' : event.key;
-  if (name.length > 1 && name !== 'Space' && name.indexOf('Arrow') !== 0) {
-    // other special keys still bloom, just somewhere by name
-  }
   const s = spotFor(name);
   handleKey(name, s.x, s.y);
 }
@@ -102,13 +149,15 @@ function handleKey(name, x, y) {
   hint.style.opacity = '0';
   last.textContent = 'You pressed: ' + name;
   addBloom(name, x, y);
+  playNote(name);
 }
 
 window.addEventListener('keydown', onKey);
 
 // phones have no keyboard, so a tap blooms right where you touch
 canvas.addEventListener('pointerdown', function (e) {
-  handleKey('tap' + blooms.length, e.clientX / window.innerWidth, e.clientY / window.innerHeight);
+  // taps cycle through a few names so they sing different notes
+  handleKey('tap' + (blooms.length % 7), e.clientX / window.innerWidth, e.clientY / window.innerHeight);
   last.textContent = 'You tapped the garden';
 });
 
